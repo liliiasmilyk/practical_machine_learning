@@ -1,0 +1,121 @@
+# Practical Machine Learning - Course Project  
+Author Liliia Smilyk  
+
+## Synopsis  
+In this project, we use data from accelerometers on the belt, forearm, arm and dumbell of 6 participants to predict the manner in which they did the exercise (the "classe" variable in training data set). We will use random forest method to build predictive model.  
+
+## Loading packages  
+```{r package}  
+library(dplyr)
+library(caret)
+library(randomForest)
+library(knitr)
+```  
+
+## Loading data  
+we are loading training data set and testing data set. Testing data set has information about 20 participants and we will use our predictive model to predict classe for this 20 participants at the end of the report. We will work only with training data set.  
+
+```{r data}
+fileURL_train <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+a <- download.file(fileURL_train, destfile = "pml-training.csv", method = "curl")
+df_train <- read.csv("pml-training.csv", header = TRUE, row.names = 1)
+
+fileURL_test <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+b <- download.file(fileURL_test, destfile = "pml-testing.csv", method = "curl")
+df_test <- read.csv("pml-testing.csv", header = TRUE, row.names = 1)
+```
+
+Now we have two data frames - df_train (data for building predictive model) and df_test.  
+
+## Cleaning and exploring data  
+Let`s look at our training data.  
+
+```{r explore}
+str(df_train)  
+```
+
+As we can see there are lots of variables that we don`t need. So we remove calculated and sequence variables from training and testing data sets.    
+
+```{r remove}
+names_minus <- c(grep("^.*timestamp.*", names(df_train)), 
+                 grep("^min.*", names(df_train)),
+                 grep("^max.*", names(df_train)),
+                 grep("^var.*", names(df_train)),
+                 grep("stddev.*", names(df_train)),
+                 grep("^avg.*", names(df_train)),
+                 grep("^total.*", names(df_train)),
+                 grep("^new_window.*", names(df_train)),
+                 grep("^num_window.*", names(df_train)))
+df_train1 <- select(df_train, -names_minus)
+df_test1 <- select(df_test, -names_minus)
+```
+
+Also we need to remove variables that contains missing values.  
+
+```{r removena}
+df_train2 <- df_train1[, colSums(is.na(df_train1)) == 0]
+df_test2 <- df_test1[, colSums(is.na(df_test1)) == 0]
+```
+
+And we need to remove variables with near zero variance.  
+
+```{r removenzv}
+nzv <- nearZeroVar(df_train2)
+df_train2 <- df_train2[, -nzv]
+nzv_test <- nearZeroVar(df_test2)
+nzv_test
+```
+
+As we can see there are no such variables in testing data.  
+
+```{r dim}
+dim(df_train2)
+dim(df_test2)
+```  
+
+Now we have clean data to build predictive model and use it.  
+
+## Building predictive model  
+At first we use cross validation to split our training data set (df_train2) into two subsets - training (60%) and validation (40%) data sets. We use random subsampling method.  
+
+```{r split}
+set.seed(1614)
+InTrain <- createDataPartition(y = df_train2$classe, p = 0.6, list = FALSE)
+training <- df_train2[InTrain,]
+validation <- df_train2[-InTrain,]
+```
+
+Determine the model using randomForest package.  
+
+```{r rf}
+fit <- randomForest(classe ~ ., data = training)
+```
+
+Use model to predict classe for validation data set.  
+
+```{r predictvalid}
+pred <- predict(fit, validation)
+con_matrix <- confusionMatrix(pred, validation$classe)
+print(con_matrix)
+```  
+
+```{r accuracy}
+paste("Accuracy of predictive model is high - ", round(con_matrix$overall['Accuracy'], 4), ".") 
+```
+Out of sample error is less than 0.01. So model is pretty good.  
+Let`s plot the model.  
+
+```{r plot, fig.height = 4, fig.width = 6}
+plot(con_matrix$table, col = con_matrix$byClass, 
+     main = paste("Random Forest Confusion Matrix: Accuracy =", 
+                  round(con_matrix$overall['Accuracy'], 4)))
+```
+
+## Applying predictive model to testing data set  
+Use random forest predictive model on the testing data set to predict classe for 20 participants.  
+```{r predict}
+pred_test <- predict(fit, df_test2)
+df_test2$classe_prediction <- pred_test
+```  
+
+The result of prediction will be used to answer Course Project Prediction Quiz.
